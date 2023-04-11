@@ -1,0 +1,128 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: CodeBuild project to build and push Docker images to ECR
+Parameters:
+  ProjectName:
+    Description: Set the project name.
+    Type: String
+    Default: sac
+  DefaultImageTag:
+    Description: Set the default container image tag.
+    Type: String
+    Default: latest
+Resources:
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${CodeBuildProjectName}-CodeBuildServiceRole
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+        Version: 2012-10-17
+      Path: /service-role/
+      Policies:
+        - PolicyName: !Sub ${CodeBuildProjectName}-CodeBuildServiceRole-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Resource: '*'
+                Effect: Allow
+                Action:
+                  - codecommit:GitPull
+              - Resource: '*'
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:CompleteLayerUpload
+                  - ecr:DescribeRepositories
+                  - ecr:GetAuthorizationToken
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+              - Resource: '*'
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub ${ProjectName}-codebuild-project
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:6.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: AWS_DEFAULT_REGION
+            Value: !Ref AWS::Region
+          - Name: AWS_ACCOUNT_ID
+            Value: !Ref AWS::AccountId
+          - Name: IMAGE_REPO_NAME
+            Value: ''
+          - Name: IMAGE_TAG
+            Value: !Sub ${DefaultImageTag}
+          - Name: DOCKERFILE_NAME
+            Value: Dockerfile
+          - Name: DOCKER_BUILD_CONTEXT
+            Value: .
+          - Name: DOCKER_BUILD_ARG
+            Value: ''
+          - Name: DOCKERHUB_USER
+            Value: ''
+          - Name: DOCKERHUB_TOKEN
+            Value: ''
+      Source:
+        Type: NO_SOURCE
+        GitCloneDepth: 1
+        BuildSpec: |
+          version: 0.2
+          phases:
+            pre_build:
+              commands:
+                - echo 'Validating variables...'
+                - echo "  IMAGE_REPO_NAME  <-  ${IMAGE_REPO_NAME}" && test -n "${IMAGE_REPO_NAME}"
+                - echo "  IMAGE_TAG        <-  ${IMAGE_TAG}" && test -n "${IMAGE_TAG}"
+                - echo 'Check Amazon ECR repository...'
+                - aws ecr describe-repositories --repository-names "${IMAGE_REPO_NAME}"
+                - echo 'Logging in to Amazon ECR...'
+                - aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+                - |
+                  if [ -n "${DOCKERHUB_USER}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
+                    echo 'Logging in to Docker Hub...'
+                    echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USER}" --password-stdin
+                  fi
+            build:
+              commands:
+                - echo "Build started on $(date)"
+                - echo 'Building the Docker image...'
+                - docker image build -t "${IMAGE_REPO_NAME}:${IMAGE_TAG}" -f "${DOCKER_BUILD_CONTEXT%/}/${DOCKERFILE_NAME}" $(test -z "${DOCKER_BUILD_ARG}" || echo "--build-arg ${DOCKER_BUILD_ARG}") "${DOCKER_BUILD_CONTEXT}"
+                - docker image tag "${IMAGE_REPO_NAME}:${IMAGE_TAG}" "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${IMAGE_REPO_NAME}:${IMAGE_TAG}"
+            post_build:
+              commands:
+                - echo "Build completed on $(date)"
+                - echo 'Pushing the Docker image...'
+                - docker image push "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${IMAGE_REPO_NAME}:${IMAGE_TAG}"
+      SourceVersion: main
+      TimeoutInMinutes: 10
+      LogsConfig:
+        CloudWatchLogs:
+          GroupName: !Ref CodeBuildLogGroup
+          Status: ENABLED
+      Tags:
+        - Key: Name
+          Value: !Sub ${CodeBuildProjectName}
+  CodeBuildLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/codebuild/${CodeBuildProjectName}
+      RetentionInDays: 14
