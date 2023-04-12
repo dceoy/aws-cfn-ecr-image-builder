@@ -1,0 +1,79 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: CodeBuild project to build and push Docker images to ECR
+Parameters:
+  ProjectName:
+    Description: Set the project name.
+    Type: String
+    Default: ib
+Resources:
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-CodeBuildServiceRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - sts:AssumeRole
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+      Path: /service-role/
+      Policies:
+        - PolicyName: !Sub ${ProjectName}-CodeBuildServiceRole-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Resource: '*'
+                Effect: Allow
+                Action:
+                  - codecommit:GitPull
+              - Resource: '*'
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:CompleteLayerUpload
+                  - ecr:DescribeRepositories
+                  - ecr:GetAuthorizationToken
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+              - Resource: '*'
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+  CodeBuildEventsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-CodeBuildEventsRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              Service:
+                - events.amazonaws.com
+      Path: /
+      Policies:
+        - PolicyName: !Sub ${ProjectName}-CodeBuildEventsRole-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Resource: '*'
+                Effect: Allow
+                Action:
+                  - codebuild:StartBuild
+Outputs:
+  CodeBuildServiceRole:
+    Value: !GetAtt CodeBuildServiceRole.Arn
+    Export:
+      Name: !Sub ${AWS::Region}-${AWS::StackName}-CodeBuildServiceRole
+  CodeBuildEventsRole:
+    Value: !GetAtt CodeBuildEventsRole.Arn
+    Export:
+      Name: !Sub ${AWS::Region}-${AWS::StackName}-CodeBuildEventsRole

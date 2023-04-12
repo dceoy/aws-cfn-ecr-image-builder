@@ -5,62 +5,70 @@ Parameters:
   ProjectName:
     Description: Set the project name.
     Type: String
-    Default: sac
+    Default: ib
+  CodeCommitRepositoryName:
+    Description: Set the CodeCommit repository name.
+    Type: String
+  EcrRepositoryName:
+    Description: Set the ECR repository name.
+    Type: String
+  IamStackName:
+    Description: Set the IAM stack name.
+    Type: String
+    Default: ib-iam-roles-for-codebuild
   DefaultImageTag:
     Description: Set the default container image tag.
     Type: String
     Default: latest
+  CodeCommitBranch:
+    Description: Set the CodeCommit branch.
+    Type: String
+    Default: main
+  DockerfileName:
+    Description: Set the Dockerfile name.
+    Type: String
+    Default: Dockerfile
+  DockerBuildContext:
+    Description: Set the Docker build context.
+    Type: String
+    Default: .
+  DockerBuildArg:
+    Description: Set the Docker build-time variables.
+    Type: String
+    Default: ''
+  DockerHubUser:
+    Description: Set the Docker Hub user.
+    Type: String
+    Default: ''
+  DockerHubToken:
+    Description: Set the Docker Hub token.
+    Type: String
+    Default: ''
+  CodeBuildEnvironmentType:
+    Description: Set the CodeBuild environment type.
+    Type: String
+    Default: LINUX_CONTAINER
+  CodeBuildEnvironmentComputeType:
+    Description: Set the CodeBuild environment compute type.
+    Type: String
+    Default: BUILD_GENERAL1_SMALL
+  CodeBuildEnvironmentImage:
+    Description: Set the CodeBuild environment image.
+    Type: String
+    Default: aws/codebuild/standard:6.0
 Resources:
-  CodeBuildServiceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub ${CodeBuildProjectName}-CodeBuildServiceRole
-      AssumeRolePolicyDocument:
-        Statement:
-          - Action:
-              - sts:AssumeRole
-            Effect: Allow
-            Principal:
-              Service:
-                - codebuild.amazonaws.com
-        Version: 2012-10-17
-      Path: /service-role/
-      Policies:
-        - PolicyName: !Sub ${CodeBuildProjectName}-CodeBuildServiceRole-policy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Resource: '*'
-                Effect: Allow
-                Action:
-                  - codecommit:GitPull
-              - Resource: '*'
-                Effect: Allow
-                Action:
-                  - ecr:BatchCheckLayerAvailability
-                  - ecr:CompleteLayerUpload
-                  - ecr:DescribeRepositories
-                  - ecr:GetAuthorizationToken
-                  - ecr:InitiateLayerUpload
-                  - ecr:PutImage
-                  - ecr:UploadLayerPart
-              - Resource: '*'
-                Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
       Name: !Sub ${ProjectName}-codebuild-project
-      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      ServiceRole:
+        Fn::ImportValue: !Sub ${AWS::Region}-${IamStackName}-CodeBuildServiceRole
       Artifacts:
         Type: NO_ARTIFACTS
       Environment:
-        Type: LINUX_CONTAINER
-        ComputeType: BUILD_GENERAL1_SMALL
-        Image: aws/codebuild/standard:6.0
+        Type: !Ref CodeBuildEnvironmentType
+        ComputeType: !Ref CodeBuildEnvironmentComputeType
+        Image: !Ref CodeBuildEnvironmentImage
         PrivilegedMode: true
         EnvironmentVariables:
           - Name: AWS_DEFAULT_REGION
@@ -68,22 +76,25 @@ Resources:
           - Name: AWS_ACCOUNT_ID
             Value: !Ref AWS::AccountId
           - Name: IMAGE_REPO_NAME
-            Value: ''
+            Value: !Ref EcrRepositoryName
           - Name: IMAGE_TAG
-            Value: !Sub ${DefaultImageTag}
+            Value: !Ref DefaultImageTag
           - Name: DOCKERFILE_NAME
-            Value: Dockerfile
+            Value: !Ref DockerfileName
           - Name: DOCKER_BUILD_CONTEXT
-            Value: .
+            Value: !Ref DockerBuildContext
           - Name: DOCKER_BUILD_ARG
-            Value: ''
+            Value: !Ref DockerBuildArg
           - Name: DOCKERHUB_USER
-            Value: ''
+            Value: !Ref DockerHubUser
           - Name: DOCKERHUB_TOKEN
-            Value: ''
+            Value: !Ref DockerHubToken
       Source:
-        Type: NO_SOURCE
+        Type: CODECOMMIT
+        Location: !Sub https://git-codecommit.${AWS::Region}.amazonaws.com/v1/repos/${CodeCommitRepositoryName}
         GitCloneDepth: 1
+        GitSubmodulesConfig:
+          FetchSubmodules: true
         BuildSpec: |
           version: 0.2
           phases:
@@ -107,22 +118,62 @@ Resources:
                 - echo 'Building the Docker image...'
                 - docker image build -t "${IMAGE_REPO_NAME}:${IMAGE_TAG}" -f "${DOCKER_BUILD_CONTEXT%/}/${DOCKERFILE_NAME}" $(test -z "${DOCKER_BUILD_ARG}" || echo "--build-arg ${DOCKER_BUILD_ARG}") "${DOCKER_BUILD_CONTEXT}"
                 - docker image tag "${IMAGE_REPO_NAME}:${IMAGE_TAG}" "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${IMAGE_REPO_NAME}:${IMAGE_TAG}"
+                - docker image tag "${IMAGE_REPO_NAME}:${IMAGE_TAG}" "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${IMAGE_REPO_NAME}:${CODEBUILD_RESOLVED_SOURCE_VERSION}"
             post_build:
               commands:
                 - echo "Build completed on $(date)"
                 - echo 'Pushing the Docker image...'
                 - docker image push "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${IMAGE_REPO_NAME}:${IMAGE_TAG}"
-      SourceVersion: main
-      TimeoutInMinutes: 10
+                - docker image push "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${IMAGE_REPO_NAME}:${CODEBUILD_RESOLVED_SOURCE_VERSION}"
+      SourceVersion: !Sub refs/heads/${CodeCommitBranch}
+      TimeoutInMinutes: 60
       LogsConfig:
         CloudWatchLogs:
           GroupName: !Ref CodeBuildLogGroup
           Status: ENABLED
       Tags:
         - Key: Name
-          Value: !Sub ${CodeBuildProjectName}
+          Value: !Sub ${ProjectName}-codebuild-project
   CodeBuildLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/codebuild/${CodeBuildProjectName}
+      LogGroupName: !Sub /aws/codebuild/${ProjectName}-codebuild-project
       RetentionInDays: 14
+  CodeBuildEventsRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub ${ProjectName}-codebuild-events-rule
+      EventPattern:
+        source:
+          - aws.codecommit
+        detail-type:
+          - CodeCommit Repository State Change
+        resources:
+          - !Sub arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${CodeCommitRepositoryName}
+        detail:
+          event:
+            - referenceCreated
+            - referenceUpdated
+          referenceType:
+            - branch
+          referenceName:
+            - !Ref CodeCommitBranch
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt CodeBuildProject.Arn
+          RoleArn:
+            Fn::ImportValue: !Sub ${AWS::Region}-${IamStackName}-CodeBuildEventsRole
+          Id: !Sub ${ProjectName}-codecommit-to-codebuild
+Outputs:
+  CodeBuildProject:
+    Value: !Ref CodeBuildProject
+    Export:
+      Name: !Sub ${AWS::Region}-${AWS::StackName}-CodeBuildProject
+  CodeBuildLogGroup:
+    Value: !Ref CodeBuildLogGroup
+    Export:
+      Name: !Sub ${AWS::Region}-${AWS::StackName}-CodeBuildLogGroup
+  CodeBuildEventsRule:
+    Value: !Ref CodeBuildEventsRule
+    Export:
+      Name: !Sub ${AWS::Region}-${AWS::StackName}-CodeBuildEventsRule
