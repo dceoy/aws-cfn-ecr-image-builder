@@ -1,0 +1,37 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: CodeCommit and ECR repositories
+Parameters:
+  CodeCommitRepositoryName:
+    Description: Set the CodeCommit repository name.
+    Type: String
+  EcrRepositoryName:
+    Description: Set the ECR repository name.
+    Type: String
+Resources:
+  CodeCommitRepository:
+    Type: AWS::CodeCommit::Repository
+    Properties:
+      RepositoryName: !Ref CodeCommitRepositoryName
+      Tags:
+        - Key: Name
+          Value: !Ref EcrRepositoryName
+  EcrRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref EcrRepositoryName
+      ImageTagMutability: MUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      Tags:
+        - Key: Name
+          Value: !Ref EcrRepositoryName
+Outputs:
+  CodeCommitRepository:
+    Value: !Ref CodeCommitRepository
+    Export:
+      Name: !Sub ${AWS::Region}-${AWS::StackName}-CodeCommitRepository
+  EcrRepository:
+    Value: !Ref EcrRepository
+    Export:
+      Name: !Sub ${AWS::Region}-${AWS::StackName}-EcrRepository

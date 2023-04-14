@@ -31,36 +31,32 @@ Installation
     $ cd aws-cfn-image-builder
     ```
 
-2.  Install [AWS CLI](https://aws.amazon.com/cli/) and [Rain](https://github.com/aws-cloudformation/rain), and set `~/.aws/config` and `~/.aws/credentials`.
+2.  Install [Rain](https://github.com/aws-cloudformation/rain), and set `~/.aws/config` and `~/.aws/credentials`.
 
-3.  Create a CodeCommit repository for Dockerfile if it doesn't exist.
-
-    ```sh
-    $ aws codecommit create-repository --repository-name your-codecommit-repo
-    ```
-
-4.  Create an ECR repository for container images if it doesn't exist.
-
-    ```sh
-    $ aws ecr create-repository --repository-name your-ecr-repo
-    ```
-
-5.  Deploy stacks for IAM roles.
+3.  Deploy stacks for IAM roles.
 
     ```sh
     $ rain deploy \
         --params ProjectName=ib-dev \
-        iam-roles-for-codebuild.cfn.yml \
-        ib-dev-iam-roles-for-codebuild
+        iam-roles-for-codebuild.cfn.yml ib-dev-iam-roles-for-codebuild
     ```
 
-6.  Deploy stacks for a CodeBuild project.
+4.  Create a CodeCommit repository for Dockerfile and an ECR repository (if they don't exist).
 
     ```sh
-    # Replace your-codecommit-repo and your-ecr-repo with your repository names
+    $ rain deploy \
+        --params CodeCommitRepositoryName=your-codecommit-repo,EcrRepositoryName=your-ecr-repo \
+        codecommit-and-ecr-repositories.cfn.yml \
+        ib-dev-codecommit-and-ecr-repositories
+    ```
+
+5.  Deploy stacks for a CodeBuild project and an events rule.
+
+    ```sh
     $ rain deploy \
         --params ProjectName=ib-dev,CodeCommitRepositoryName=your-codecommit-repo,EcrRepositoryName=your-ecr-repo,IamStackName=ib-dev-iam-roles-for-codebuild \
-        codebuild-project.cfn.yml ib-dev-codebuild-project
+        codebuild-project-and-events-rule.cfn.yml \
+        ib-dev-codebuild-project-and-events-rule
     ```
 
 Usage
@@ -73,3 +69,5 @@ Usage
     $ cd /path/to/your/git/project
     $ git push codecommit://your-codecommit-repo main:main
     ```
+
+2.  Wait for a CodeBuild run to build and push a container image.
