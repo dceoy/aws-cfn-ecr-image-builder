@@ -1,9 +1,9 @@
-aws-cfn-image-builder
-=====================
+aws-cfn-ecr-image-builder
+=========================
 
 AWS CloudFormation stacks of CodeCommit-to-ECR integration to build and push a container image
 
-[![Lint](https://github.com/dceoy/aws-cfn-image-builder/actions/workflows/lint.yml/badge.svg)](https://github.com/dceoy/aws-cfn-image-builder/actions/workflows/lint.yml)
+[![Lint](https://github.com/dceoy/aws-cfn-ecr-image-builder/actions/workflows/lint.yml/badge.svg)](https://github.com/dceoy/aws-cfn-ecr-image-builder/actions/workflows/lint.yml)
 
 ```mermaid
 sequenceDiagram
@@ -27,8 +27,8 @@ Installation
 1.  Check out the repository.
 
     ```sh
-    $ git clone git@github.com:dceoy/aws-cfn-image-builder.git
-    $ cd aws-cfn-image-builder
+    $ git clone git@github.com:dceoy/aws-cfn-ecr-image-builder.git
+    $ cd aws-cfn-ecr-image-builder
     ```
 
 2.  Install [Rain](https://github.com/aws-cloudformation/rain), and set `~/.aws/config` and `~/.aws/credentials`.
