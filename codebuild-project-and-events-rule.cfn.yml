@@ -134,11 +134,18 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${ProjectName}-codebuild-project
+        - Key: ProjectName
+          Value: !Ref ProjectName
   CodeBuildLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub /aws/codebuild/${ProjectName}-codebuild-project
       RetentionInDays: 14
+      Tags:
+        - Key: Name
+          Value: !Sub /aws/codebuild/${ProjectName}-codebuild-project
+        - Key: ProjectName
+          Value: !Ref ProjectName
   CodeBuildEventsRule:
     Type: AWS::Events::Rule
     Properties:

@@ -15,7 +15,7 @@ Resources:
       RepositoryName: !Ref CodeCommitRepositoryName
       Tags:
         - Key: Name
-          Value: !Ref EcrRepositoryName
+          Value: !Ref CodeCommitRepositoryName
   EcrRepository:
     Type: AWS::ECR::Repository
     Properties:

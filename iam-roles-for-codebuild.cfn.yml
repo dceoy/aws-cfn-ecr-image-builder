@@ -26,12 +26,11 @@ Resources:
           PolicyDocument:
             Version: 2012-10-17
             Statement:
-              - Resource: '*'
-                Effect: Allow
+              - Effect: Allow
                 Action:
                   - codecommit:GitPull
-              - Resource: '*'
-                Effect: Allow
+                Resource: '*'
+              - Effect: Allow
                 Action:
                   - ecr:BatchCheckLayerAvailability
                   - ecr:CompleteLayerUpload
@@ -40,12 +39,18 @@ Resources:
                   - ecr:InitiateLayerUpload
                   - ecr:PutImage
                   - ecr:UploadLayerPart
-              - Resource: '*'
-                Effect: Allow
+                Resource: '*'
+              - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
+                Resource: '*'
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-CodeBuildServiceRole
+        - Key: ProjectName
+          Value: !Ref ProjectName
   CodeBuildEventsRole:
     Type: AWS::IAM::Role
     Properties:
@@ -68,6 +73,11 @@ Resources:
                 Effect: Allow
                 Action:
                   - codebuild:StartBuild
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-CodeBuildEventsRole
+        - Key: ProjectName
+          Value: !Ref ProjectName
 Outputs:
   CodeBuildServiceRole:
     Value: !GetAtt CodeBuildServiceRole.Arn
